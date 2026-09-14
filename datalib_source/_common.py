@@ -165,36 +165,3 @@ def sql_str(v) -> str:
     if v is None:
         return "NULL"
     return "'" + str(v).replace("'", "''") + "'"
-
-
-# --- entity ids (docs/dev/entity_ids.md) -----------------------------------
-#
-# datalib's id recipe, reimplemented in stdlib. VALIDATED: feeding
-# ("claude", ProviderGlobal, "conversation", <conversation uuid>) through
-# this reproduces 000982e7-b185-523b-95d2-9f074526ec9b, the row datalib
-# itself minted and put in the index.
-#
-# Use it. A raw upstream id in the `uuid` column happens to work until two
-# sources collide, and by then the id is also the markdown anchor, the
-# /chat/{...} URL handed out, and the string feedback.target_uuids stored
-# forever -- none of which are recoverable after the fact.
-
-import uuid as _uuid
-
-DATALIB_ID_NS = _uuid.UUID(bytes=b"datalib-id-ns-v1")
-_US = "\x1f"   # unit separator: cannot appear in any upstream id
-
-
-def entity_id(namespace: str, scope: tuple[str, str], kind: str, key: str) -> str:
-    """scope is ("pg","") | ("up",<id>) | ("src",<id>) | ("content","")."""
-    tag, val = scope
-    return str(_uuid.uuid5(DATALIB_ID_NS, _US.join([namespace, tag, val, kind, key])))
-
-
-PROVIDER_GLOBAL = ("pg", "")
-
-
-def composite_key(*parts: str) -> str:
-    """`#`, not the US that separates recipe components -- this exact string
-    is also what grid_rows.upstream_id stores."""
-    return "#".join(parts)
