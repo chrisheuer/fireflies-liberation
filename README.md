@@ -90,6 +90,18 @@ suggests and a human has not ratified — guessing there is how two people
 quietly become one. `aliases.json` is gitignored on purpose: a real
 alias table is a list of real people and who you meet with.
 
+## Tests
+
+```sh
+cd datalib_source && python3 -m unittest discover -s tests
+```
+
+They run against **your own dump**, not a checked-in fixture, and skip
+when there is no dump (16 of 18 skip on a fresh clone -- that is the
+expected result, not a failure). No transcript or media content is in
+this repository, and none should ever be added: a fixture built from
+real meetings is someone's private conversation.
+
 ## Things that cost us time
 
 Written down because each one fails *quietly* — the step reports success
