@@ -1,0 +1,38 @@
+# Fireflies as a datalib source.
+#
+# Both steps declare `command`, so the group carries NO `type`: `type`
+# selects a built-in datalib provider and there is no built-in fireflies.
+# Paths in `command` must be ABSOLUTE -- a step's working directory is the
+# data root, not this repo.
+#
+# `render_sig` is not decoration. datalib decides whether to run a step
+# from its config entry and its inputs; the bytes of the script a
+# `command` points at are NOT part of that. Edit the renderer and the
+# step is skipped, silently, while the run reports success. Bump this
+# string whenever you change the render code.
+
+[[groups]]
+id = "fireflies"
+name = "Fireflies.ai"
+
+[[steps]]
+group = "fireflies"
+function = "ingest"
+command = "python3 /ABSOLUTE/PATH/TO/fireflies-liberation/datalib_source/ingest.py"
+[steps.params.export]
+path = "~/fireflies-dump"
+
+[[steps]]
+group = "fireflies"
+function = "render_markdown"
+command = "python3 /ABSOLUTE/PATH/TO/fireflies-liberation/datalib_source/render_markdown.py"
+inputs = ["fireflies/ingest"]
+[steps.params]
+render_sig = "bump-me-on-render-changes"
+
+# Add fireflies/render_markdown to the shared index steps:
+#
+# [[steps]]
+# group = "unified_index"
+# function = "grid_index"
+# inputs = ["fireflies/render_markdown"]

@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "_README": [
+    "Speaker aliases, applied at RENDER time -- never to the dump, never to",
+    "grid_rows. The dump is immutable and grid_rows is derived: an UPDATE",
+    "there survives exactly until the next grid_index run rebuilds it.",
+    "",
+    "Copy this file to aliases.json and edit. aliases.json is gitignored,",
+    "because a real alias table is a list of real people and who you meet",
+    "with. Keep yours out of version control.",
+    "",
+    "`confirmed` is APPLIED. `proposed` is NOT -- it is what the data",
+    "suggests, held back until a human says so. Promote an entry by moving",
+    "it into `confirmed` and re-running the sync.",
+    "",
+    "Matching is case- and whitespace-insensitive on the variant; the",
+    "canonical form is written out verbatim."
+  ],
+
+  "confirmed": {
+    "Jane Smith": {
+      "variants": ["Jane S", "J. Smith"],
+      "confirmed_by": "you",
+      "confirmed_at": "2026-01-01",
+      "note": "Fireflies emitted several speaker_name spellings for one person."
+    }
+  },
+
+  "proposed": {
+    "Alex Rivera": {
+      "variants": ["Alex R"],
+      "evidence": "same abbreviation pattern; co-occur in the same meetings"
+    }
+  },
+
+  "not_people": {
+    "_note": "Labels that are not parties at all. Recorded so they are not mistaken for aliases.",
+    "entries": ["iPhone", "Unknown", "Unknown Speaker"]
+  }
+}

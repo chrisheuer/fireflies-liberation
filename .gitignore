@@ -1,0 +1,11 @@
+# A real alias table is a list of real people. Never commit it.
+datalib_source/aliases.json
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+
+# dumps never live in the repo
+fireflies-dump/
+*.dump/
