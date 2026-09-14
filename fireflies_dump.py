@@ -17,6 +17,7 @@ Business/Enterprise 60/min. One transcript == one request.
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import subprocess
@@ -333,6 +334,24 @@ def resolve_key(service: str) -> str:
                 return out.stdout.strip()
         except (OSError, subprocess.SubprocessError):
             pass
+    # Last resort: ask. getpass does not echo and the value never reaches
+    # the environment, the shell history, or the process list -- which is
+    # more than can be said for the alternatives. Only when someone is
+    # actually at a terminal; a cron run must fail with the message below
+    # rather than hang on a prompt nobody will answer.
+    if sys.stdin.isatty() and sys.stderr.isatty():
+        try:
+            typed = getpass.getpass("Fireflies API key (input hidden): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print(file=sys.stderr)
+            return ""
+        if typed:
+            print("Tip: store it so you are not asked again --\n"
+                  f'  security add-generic-password -a "$USER" -s {service} '
+                  '-w "$(pbpaste)"' if sys.platform == "darwin" else
+                  "Tip: export FIREFLIES_API_KEY to avoid the prompt.",
+                  file=sys.stderr)
+            return typed
     return ""
 
 

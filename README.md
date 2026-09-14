@@ -15,40 +15,80 @@ Written because an account was closing and the transcripts were going
 with it. If that is your situation, run the dump first and read the rest
 afterwards.
 
-## Get your data out
+## Get your transcripts out, step by step
 
-Python 3.11+ and `requests`.
+Needs Python 3.11+ and `requests` (`pip install -r requirements.txt`).
 
-```sh
-pip install -r requirements.txt
+### Step 1 — get your API key
 
-export FIREFLIES_API_KEY="..."        # or use the macOS Keychain -- see below
+Open <https://app.fireflies.ai/integrations/custom/fireflies> and copy
+the key. Every plan tier can call the API; they differ in rate. Details
+and the caveats: **[docs/CREDENTIALS.md](docs/CREDENTIALS.md)**.
 
-python3 fireflies_dump.py whoami      # does the key work?
-python3 fireflies_dump.py inventory   # what exists -> inventory.json
-python3 fireflies_dump.py dump --max 5   # trial run
-python3 fireflies_dump.py dump           # everything, resumable
-python3 fireflies_dump.py verify         # dump vs inventory
-```
+### Step 2 — store it so you are not asked twice
 
-Output goes to `~/fireflies-dump` (`--out` to change). Re-running `dump`
-picks up what is missing.
-
-**Where the key lives, which plan you need, and how to store it safely:
-[docs/CREDENTIALS.md](docs/CREDENTIALS.md).** Short version — the key is
-at <https://app.fireflies.ai/integrations/custom/fireflies>, and the
-Keychain is the recommended home:
+On macOS, put it in the Keychain. Copy the key first, then:
 
 ```sh
 security add-generic-password -a "$USER" -s FIREFLIES_API_KEY -w "$(pbpaste)"
 ```
 
-`$(pbpaste)` keeps the key out of your shell history.
+`$(pbpaste)` rather than the key itself is deliberate — your shell
+records the command *before* expanding it, so your history keeps the
+harmless `$(pbpaste)` text instead of a live credential.
 
-**One transcript is one request**, so the rate limit sets how long a dump
-takes: 1,000 transcripts is ~20 minutes on Business, ~2 days on Pro, and
-~20 days on Free. `dump` is resumable, so the slow tiers still work — run
-it daily until `verify` is clean.
+Anywhere else, `export FIREFLIES_API_KEY="..."`.
+
+**Or skip both.** Run any command with no key configured and, if you are
+at a terminal, it asks. Input is hidden, and the value never reaches your
+environment, your shell history, or the process list.
+
+### Step 3 — check the key works
+
+```sh
+python3 fireflies_dump.py whoami
+```
+
+Your account details mean you are in. An auth error means the key is
+wrong or your plan has no API access.
+
+### Step 4 — see what is there before pulling it
+
+```sh
+python3 fireflies_dump.py inventory
+```
+
+Writes `inventory.json` and prints counts. **One transcript is one
+request**, so this number sets how long the dump takes: ~20 minutes for
+1,000 on Business, ~2 days on Pro, ~20 days on Free.
+
+### Step 5 — trial run
+
+```sh
+python3 fireflies_dump.py dump --max 5
+```
+
+Five transcripts into `~/fireflies-dump`. Look at them before spending
+your rate limit on the rest.
+
+### Step 6 — pull everything
+
+```sh
+python3 fireflies_dump.py dump
+```
+
+Resumable: re-run it and it collects what is missing. On a low tier, run
+it daily. `--rpm` caps the request rate, default 60. `--out` moves the
+dump; `--since` / `--until` bound it by date.
+
+### Step 7 — confirm nothing is missing
+
+```sh
+python3 fireflies_dump.py verify
+```
+
+Checks the dump against `inventory.json` and names any gaps. Do this
+before you close the account, not after.
 
 ### The dump is the source of truth
 
@@ -57,23 +97,61 @@ the account is gone, nothing regenerates it. Back it up, and never edit
 a file inside it. To change how the data looks, change the renderer and
 re-run the sync.
 
-## Put it in datalib
+## How it plugs into datalib
 
-**[docs/DATALIB-SOURCE.md](docs/DATALIB-SOURCE.md)** — setup, config, what
-it produces, and the traps.
+[datalib](https://github.com/imbue-ai/datalib) mirrors your data from the
+services that hold it into stores you own, renders it to markdown, and
+builds two indexes over everything: a SQL one behind its grid, and a
+semantic one for search. Its value is the *unified* part — one query
+across every source at once.
 
-Short version: datalib needs no Rust provider for this. Any executable
-can be a step, and `grid_index` finds a source by scanning for
-`<data_root>/<name>/render_markdown/indexed_markdown.doltlite_db`. These
-two Python steps write exactly that. Copy
-[`config.example.toml`](config.example.toml) into your data root, set the
-absolute paths, sync.
+It ships providers for Claude, ChatGPT, Slack, Gmail, Notion, Signal and
+a couple of dozen more. Fireflies is not among them, and adding one
+normally means a Rust crate and a Bazel build.
+
+That is not required. Two facts in datalib's design make a plain script
+enough:
+
+- **Any executable can be a step.** The contract is argv, a handful of
+  environment variables, and NDJSON on stdout
+  ([`step_protocol.md`](https://github.com/imbue-ai/datalib/blob/main/docs/dev/step_protocol.md)).
+- **Sources are discovered on the filesystem, not registered.**
+  `grid_index` scans for
+  `<data_root>/<name>/render_markdown/indexed_markdown.doltlite_db` and
+  indexes whatever it finds.
+
+So `datalib_source/` is two Python scripts that write that store. datalib
+picks the meetings up on the next sync and they appear in the grid and in
+semantic search beside every other source.
+
+```
+~/fireflies-dump/        fireflies/ingest/         fireflies/render_markdown/
+  transcripts/*.json  ->   entities.doltlite_db ->   <id>/all.md
+  media/                                             indexed_markdown.doltlite_db
+                                                              |
+                                                  unified_index/grid_index
+```
+
+Setup, configuration and the failure modes:
+**[docs/DATALIB-SOURCE.md](docs/DATALIB-SOURCE.md)**. Needs
+`datalib-doltlite` on `PATH` — it ships in datalib's release.
 
 Meetings arrive as one `Meeting` row per transcript plus `Meeting
-Segment` rows grouping consecutive turns into ~1000-character passages —
-a readable passage rather than a "Yeah." fragment.
+Segment` rows grouping consecutive turns into ~1000-character passages,
+so a search hit comes back as a readable passage rather than a "Yeah."
 
-Needs `datalib-doltlite` on `PATH` (it ships in datalib's release).
+## Where this came from
+
+Built at an [Imbue](https://imbue.com) punk-software hackathon in
+September 2026, for an actual problem: a Fireflies account was closing
+and several years of meeting transcripts were going with it. "Punk"
+is Imbue's framing — software centred on people rather than companies,
+where owning your own data is the point rather than a feature.
+
+The dump tool came first and stands alone. The datalib source came
+second, once the transcripts were safe.
+
+Not affiliated with Fireflies.ai or Imbue.
 
 ## Status
 
@@ -82,6 +160,28 @@ rows**, into a datalib mirror alongside Claude and Otter transcripts.
 Python 3.11+, macOS and Linux.
 
 Not affiliated with Fireflies.ai or Imbue.
+
+## To review and address
+
+Known deviations and open work, carried here so they are visible rather
+than buried. Full list with the reasoning:
+**[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+- **Row `uuid`s deviate from datalib's id recipe.** This source uses raw
+  Fireflies ids (`<id>`, `<id>:b<n>`) for `grid_rows.uuid`, where
+  datalib's [`entity_ids.md`](https://github.com/imbue-ai/datalib/blob/main/docs/dev/entity_ids.md)
+  specifies a UUIDv5 over a namespaced recipe. It works — Fireflies ids
+  are ULID-shaped, so a collision with another source is unlikely — but
+  it is a deviation, and that id is also the markdown anchor and half of
+  a `/chat/{...}` URL. Changing it later invalidates both, plus any
+  feedback already filed against those ids. **Worth fixing before the
+  ids spread further**, not after.
+- **`render_sig` is manual.** The step warns when it is missing, but you
+  have to bump it yourself after a render change.
+- **A Rust port** is the intended path for contributing this upstream to
+  datalib proper. Not yet discussed with the maintainers.
+- **No tests for `fireflies_dump.py`** — it was written against a live
+  account under time pressure.
 
 ## License
 

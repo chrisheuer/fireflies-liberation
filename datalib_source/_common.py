@@ -7,11 +7,30 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 DOLTLITE = os.environ.get("DATALIB_DOLTLITE", "datalib-doltlite")
+
+
+def require_doltlite() -> None:
+    """Fail loudly, once, if the doltlite shell is not on PATH.
+
+    Without this the first write dies inside subprocess with a bare
+    FileNotFoundError several frames down, which reads like a bug in this
+    code rather than a missing binary. It ships in datalib's own release
+    tarball, so the fix is a PATH fix, and the message says so.
+    """
+    if shutil.which(DOLTLITE) is None:
+        raise RuntimeError(
+            f"{DOLTLITE!r} is not on PATH.\n"
+            "It ships in the datalib release tarball alongside datalib-dag.\n"
+            "Either add that directory to PATH, or point DATALIB_DOLTLITE at "
+            "the binary:\n"
+            "    export DATALIB_DOLTLITE=/path/to/datalib-doltlite"
+        )
 
 
 # --- the NDJSON event protocol (docs/dev/step_protocol.md) -----------------

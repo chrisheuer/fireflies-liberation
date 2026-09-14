@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import (Doltlite, StepEnv, log, outcome, progress_inc,  # noqa: E402
+from _common import (Doltlite, require_doltlite, StepEnv, log, outcome, progress_inc,  # noqa: E402
                      progress_length, progress_message, sql_str)
 from identity import ALIASES_PATH, canonical, stats as identity_stats  # noqa: E402
 
@@ -279,6 +279,14 @@ def row_sql(r: dict) -> str:
 
 def main() -> int:
     env = StepEnv()
+    try:
+        require_doltlite()
+    except RuntimeError as e:
+        # A missing binary is the environment being wrong, not the
+        # data. Say so plainly instead of dying inside subprocess.
+        log(str(e), "error")
+        outcome(env.step, failure="data")
+        return 1
     out_dir = env.out_dir
     src = env.data_root / (env.inputs[0] if env.inputs else "fireflies/ingest")
     raw_db = src / "entities.doltlite_db"
@@ -396,7 +404,41 @@ def main() -> int:
         db.script(stmts)
 
     head = db.commit(f"fireflies render: {rendered} documents, {total_rows} rows")
-    log(f"{rendered} rendered ({total_rows} grid rows), {unchanged} unchanged", "info")
+
+    # Prove the thing grid_index actually reads exists and has rows in it.
+    # Writing markdown and no store is the classic silent success here:
+    # every step reports done and the source contributes NOTHING to the
+    # index, with no error anywhere to explain it. Better to fail the step.
+    store = out_dir / STORE
+    if not store.is_file():
+        log(f"render wrote no {STORE} -- grid_index would skip this source "
+            f"silently. Expected it at {store}", "error")
+        outcome(env.step, failure="data")
+        return 1
+    try:
+        n_rows = int(db.query("SELECT count(*) FROM grid_rows;")[0][0])
+    except (RuntimeError, IndexError, ValueError) as e:
+        log(f"wrote {STORE} but could not read it back: {e}", "error")
+        outcome(env.step, failure="data")
+        return 1
+    if n_rows == 0 and ids:
+        log(f"{len(ids)} transcripts in the raw store but 0 rows in {STORE} -- "
+            "the source would appear empty in the index", "error")
+        outcome(env.step, failure="data")
+        return 1
+
+    # No render_sig in the config means a change to THIS file will not make
+    # datalib re-run the step: it fingerprints the config entry and the
+    # inputs, never the script's bytes. The step would be skipped while
+    # reporting success, and the old output would stand.
+    if not (env.params or {}).get("render_sig"):
+        log("no `render_sig` in [steps.params]: editing this renderer will "
+            "NOT trigger a re-render, because datalib fingerprints the config "
+            "and inputs, not the script. Add one and bump it on render "
+            "changes -- see docs/DATALIB-SOURCE.md", "warn")
+
+    log(f"{rendered} rendered ({total_rows} grid rows), {unchanged} unchanged; "
+        f"{STORE} holds {n_rows} rows", "info")
     outcome(env.step, head)
     return 0
 

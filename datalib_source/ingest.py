@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import (Doltlite, StepEnv, log, outcome, progress_inc,  # noqa: E402
+from _common import (Doltlite, require_doltlite, StepEnv, log, outcome, progress_inc,  # noqa: E402
                      progress_length, progress_message, sql_str)
 
 STORE = "entities.doltlite_db"
@@ -67,6 +67,14 @@ DDL = [
 
 def main() -> int:
     env = StepEnv()
+    try:
+        require_doltlite()
+    except RuntimeError as e:
+        # A missing binary is the environment being wrong, not the
+        # data. Say so plainly instead of dying inside subprocess.
+        log(str(e), "error")
+        outcome(env.step, failure="data")
+        return 1
     out_dir = env.out_dir
     db_path = out_dir / STORE
 
